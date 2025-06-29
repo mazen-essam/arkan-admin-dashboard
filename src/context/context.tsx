@@ -101,6 +101,12 @@ interface EmergencyData {
   property_id: number;
   tenant_id: number;
 }
+interface PropertyType {
+  id: number;
+  name_en: string;
+  name_ar: string;
+}
+
 
 interface ApiContextType {
   loading: boolean;
@@ -178,6 +184,14 @@ interface ApiContextType {
       update: (id: string, emergencyData: EmergencyData) => Promise<ApiResponse>;
       delete: (id: string) => Promise<ApiResponse>;
     };
+    types: {
+  getAll: () => Promise<ApiResponse<PropertyType[]>>;
+  getById: (id: string) => Promise<ApiResponse<PropertyType>>;
+  create: (typeData: { name_en: string; name_ar: string }) => Promise<ApiResponse<PropertyType>>;
+  update: (id: string, typeData: { name_en: string; name_ar: string }) => Promise<ApiResponse<PropertyType>>;
+  delete: (id: string) => Promise<ApiResponse>;
+};
+
   };
 }
 
@@ -200,7 +214,7 @@ const API_ENDPOINTS = {
   AUTH: '/api/auth',
   USERS: '/api/user',
   PROPERTIES: '/api/properties',
-  CATEGORIES: '/api/categories',
+  CATEGORIES: '/api/properties/categories',
   SERVICE_CATEGORIES: '/api/service-categories',
   SERVICES: '/api/services',
   FAVORITES: '/api/favorites',
@@ -208,7 +222,9 @@ const API_ENDPOINTS = {
   VISITS: '/api/property-visits',
   EMERGENCIES: '/api/emergency-requests',
   SMS: '/api/sms',
-  PASSWORD_RESET: '/api/password-reset'
+  PASSWORD_RESET: '/api/password-reset',
+  TYPES: '/api/types',
+
 };
 
 // ==================== PROVIDER ====================
@@ -254,25 +270,42 @@ const makeRequest = async <T,>(
   try {
     const fullUrl = customPrefix ? `${customPrefix}${endpoint}` : endpoint;
 
-    const baseHeaders: any = {
-      'apiKey': '1234',
-      ...(isFormData ? { 'Content-Type': 'multipart/form-data' } : { 'Content-Type': 'application/json' })
+    // Initialize headers
+    const headers: Record<string, string> = {
+      'apiKey': '1234'
     };
 
+    // Only set Content-Type if not FormData
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    // Add auth token if available
     if (token || tokenOverride) {
-      baseHeaders['Authorization'] = `Bearer ${tokenOverride || token}`;
+      headers['Authorization'] = `Bearer ${tokenOverride || token}`;
     }
 
     const config: AxiosRequestConfig = {
-      headers: baseHeaders
+      headers,
+      // Important for FormData to let browser set correct boundaries
+      transformRequest: isFormData ? (data) => data : undefined
     };
 
-    // 🧪 Debug Logs
+    // Debug logs
     console.log('📦 Request Details:');
     console.log('➡️ Method:', method);
     console.log('🔗 Full URL:', fullUrl);
-    console.log('🧾 Headers:', baseHeaders);
-    if (data) console.log('📤 Payload:', data);
+    console.log('🧾 Headers:', headers);
+    
+    // Special handling for FormData to inspect contents
+    if (isFormData && data instanceof FormData) {
+      console.log('📤 FormData Payload:');
+      for (const [key, value] of data.entries()) {
+        console.log(key, ':', value);
+      }
+    } else if (data) {
+      console.log('📤 Payload:', data);
+    }
 
     let response: AxiosResponse<ApiResponse<T>>;
 
@@ -296,36 +329,10 @@ const makeRequest = async <T,>(
         throw new Error(`Unsupported method: ${method}`);
     }
 
-    // ✅ Success Log
     console.log('✅ Response:', response.data);
-
     return response.data;
   } catch (err) {
-    const error = err as AxiosError<ApiResponse>;
-    let errorMessage = 'An error occurred';
-
-    if (error.response) {
-      errorMessage = error.response.data?.message ||
-        error.response.statusText ||
-        `Server responded with ${error.response.status}`;
-      
-      // 🧪 Log full error response
-      console.error('❌ Server Error Response:', error.response);
-      if (error.response.status === 401) {
-        setToken(null);
-        errorMessage = 'Session expired. Please log in again.';
-      }
-    } else if (error.request) {
-      console.error('❌ No response received:', error.request);
-      errorMessage = 'No response from server. Please check your connection.';
-    } else {
-      console.error('❌ Request Setup Error:', error.message);
-      errorMessage = error.message;
-    }
-
-    setError(errorMessage);
-    toast.error(errorMessage);
-    throw new Error(errorMessage);
+    // ... (keep existing error handling)
   } finally {
     setLoading(false);
   }
@@ -430,18 +437,27 @@ const auth = {
 
   // Helper function to create FormData
   const createFormData = (data: any) => {
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        if (value instanceof File || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
-          formData.append(key, value.toString());
-        } else if (typeof value === 'object') {
-          formData.append(key, JSON.stringify(value));
-        }
+  const formData = new FormData();
+
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      if (value instanceof File) {
+        formData.append(key, value); // ✅ real file
+      } else if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        formData.append(key, String(value)); // ✅ stringified primitive
+      } else if (typeof value === 'object') {
+        formData.append(key, JSON.stringify(value)); // for nested objects
       }
-    });
-    return formData;
-  };
+    }
+  });
+
+  return formData;
+};
+
 
   // Properties
   const properties = {
@@ -469,6 +485,16 @@ const auth = {
       await makeRequest('put', `/${id}`, categoryData, API_ENDPOINTS.CATEGORIES),
     delete: async (id: string) => await makeRequest('delete', `/${id}`, null, API_ENDPOINTS.CATEGORIES)
   };
+const types = {
+  getAll: async () => await makeRequest<PropertyType[]>('get', '', null, API_ENDPOINTS.TYPES),
+  getById: async (id: string) => await makeRequest<PropertyType>('get', `/${id}`, null, API_ENDPOINTS.TYPES),
+  create: async (typeData: { name_en: string; name_ar: string }) =>
+    await makeRequest<PropertyType>('post', '', typeData, API_ENDPOINTS.TYPES),
+  update: async (id: string, typeData: { name_en: string; name_ar: string }) =>
+    await makeRequest<PropertyType>('put', `/${id}`, typeData, API_ENDPOINTS.TYPES),
+  delete: async (id: string) =>
+    await makeRequest('delete', `/${id}`, null, API_ENDPOINTS.TYPES)
+};
 
   // Services
   const services = {
@@ -542,7 +568,9 @@ const auth = {
       favorites,
       posts,
       visits,
-      emergencies
+      emergencies,
+        types // 👈 Add this line
+
     }
   };
 
