@@ -23,30 +23,30 @@ const LoginPage = () => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  try {
-    const response = await auth.login(formData);
+    e.preventDefault();
+    try {
+      const response = await auth.login(formData);
 
-    if (response.message === "Login Successful" && response.data) {
-      toast.success("Login successful!");
+      if (response.message === "Login Successful" && response.data) {
+        toast.success("Login successful!");
 
-      // ❌ No need to check token here
-      // ✅ Navigate after successful login
-      navigate("/");
-    } else {
-      toast.error(response.message || "Login failed");
+        // ❌ No need to check token here
+        // ✅ Navigate after successful login
+        navigate("/");
+      } else {
+        toast.error(response.message || "Login failed");
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || "Login failed. Please try again.";
+
+      // Clear token on 401 just in case
+      if (error.response?.status === 401) {
+        setToken(null);
+      }
+
+      toast.error(errorMessage);
     }
-  } catch (error: any) {
-    const errorMessage = error.response?.data?.message || "Login failed. Please try again.";
-
-    // Clear token on 401 just in case
-    if (error.response?.status === 401) {
-      setToken(null);
-    }
-
-    toast.error(errorMessage);
-  }
-};
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -55,7 +55,7 @@ const LoginPage = () => {
           <h1 className="text-3xl font-bold text-gray-900">Welcome back</h1>
           <p className="mt-2 text-gray-600">Sign in to your account</p>
         </div>
-        
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
@@ -71,7 +71,7 @@ const LoginPage = () => {
                 className="mt-1"
               />
             </div>
-            
+
             <div>
               <Label htmlFor="password">Password</Label>
               <Input
