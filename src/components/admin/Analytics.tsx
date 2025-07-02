@@ -385,12 +385,13 @@ const PropertyAnalytics: React.FC = () => {
                         )}
                       </div>
                       <div className="flex space-x-2">
-                        <button 
+                        <a
+                        href={`https://arkan-last.vercel.app/site/ApartmentDetails/${property.id}`} 
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                           onClick={() => log('View Details clicked', property.id)}
                         >
                           View Details
-                        </button>
+                        </a>
                         <button 
                           className="p-2 text-gray-500 hover:text-red-500 transition-colors"
                           onClick={() => log('Favorite clicked', property.id)}
